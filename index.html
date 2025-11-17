@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <base target="_top">
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8" />
+    <title>Saldo Mercado Pago</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       * { box-sizing: border-box; }
       body {
@@ -246,7 +246,7 @@
         padding: 4px 0;
       }
 
-      /* OVERLAYS (versão + preview) */
+      /* OVERLAYS */
       .overlay {
         position: fixed;
         inset: 0;
@@ -373,22 +373,22 @@
       <!-- FORMULÁRIO -->
       <div class="form-box">
         <div class="tabs">
-          <button type="button" class="tab active" data-tipo="deposito" onclick="setTipo(this, 'deposito')">
+          <button type="button" class="tab active" onclick="setTipo(this, 'deposito')">
             Depósito
           </button>
-          <button type="button" class="tab" data-tipo="retirada" onclick="setTipo(this, 'retirada')">
+          <button type="button" class="tab" onclick="setTipo(this, 'retirada')">
             Retirada
           </button>
         </div>
 
         <label>
           Data
-          <input type="date" id="data">
+          <input type="date" id="data" />
         </label>
 
         <label>
           Valor (R$)
-          <input type="number" id="valor" step="0.01" min="0">
+          <input type="number" id="valor" step="0.01" min="0" />
         </label>
 
         <button class="primary-btn" type="button" onclick="enviar()">
@@ -438,6 +438,10 @@
     </div>
 
     <script>
+      // URL do teu Web App (já com o link que você mandou)
+      const SCRIPT_URL =
+        'https://script.google.com/macros/s/AKfycbyISW-slkYDpZ09fmUPQA5HCfF6fDopBJcFMH-aKAIYpwMYi5VgUUHhwwPOijC4lwom4A/exec';
+
       let tipoSelecionado = 'deposito';
       let versaoSelecionada = null;
       let ultimaUrlWhatsapp = null;
@@ -446,9 +450,7 @@
 
       function setTipo(btn, tipo) {
         tipoSelecionado = tipo;
-        document.querySelectorAll('.tab').forEach(function (b) {
-          b.classList.remove('active');
-        });
+        document.querySelectorAll('.tab').forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
       }
 
@@ -494,15 +496,21 @@
         const lista = document.getElementById('listaTransacoes');
         lista.innerHTML = '';
         if (info.transacoes && info.transacoes.length) {
-          info.transacoes.forEach(function (t) {
+          info.transacoes.forEach((t) => {
             const li = document.createElement('li');
             li.className = 'item';
             li.innerHTML =
               '<div class="item-info">' +
-              '<span class="item-tipo">' + t.tipo + '</span>' +
-              '<span class="item-data">' + (t.data || '') + '</span>' +
+              '<span class="item-tipo">' +
+              t.tipo +
+              '</span>' +
+              '<span class="item-data">' +
+              (t.data || '') +
+              '</span>' +
               '</div>' +
-              '<div class="item-valor">' + t.valor + '</div>';
+              '<div class="item-valor">' +
+              t.valor +
+              '</div>';
             lista.appendChild(li);
           });
         } else {
@@ -513,18 +521,22 @@
         }
       }
 
-      function carregarDashboard() {
-        google.script.run
-          .withSuccessHandler(function (info) {
-            atualizarDashboard(info);
-          })
-          .withFailureHandler(function (err) {
-            console.log('Erro ao carregar dashboard', err);
-          })
-          .getDashboardInfo();
+      async function carregarDashboard() {
+        try {
+          const res = await fetch(SCRIPT_URL + '?action=dashboard');
+          const info = await res.json();
+          atualizarDashboard(info);
+        } catch (err) {
+          console.error('Erro ao carregar dashboard', err);
+          const status = document.getElementById('status');
+          if (status) {
+            status.textContent = 'Erro ao carregar saldo.';
+            status.style.color = '#ffb3b3';
+          }
+        }
       }
 
-      function enviar() {
+      async function enviar() {
         const data = document.getElementById('data').value;
         const valor = document.getElementById('valor').value;
         const status = document.getElementById('status');
@@ -538,29 +550,35 @@
         status.textContent = 'Salvando lançamento...';
         status.style.color = '#cccccc';
 
-        google.script.run
-          .withSuccessHandler(function (res) {
-            if (res && res.dashboard) {
-              atualizarDashboard(res.dashboard);
-              ultimoSaldoPos = res.dashboard.saldo;
-            }
-            if (res) {
-              ultimaUrlWhatsapp = res.url;
-              ultimaMensagem = res.mensagem;
-              mostrarPreview();
-            }
-            status.textContent = 'Lançamento salvo. Confira a mensagem antes de enviar.';
-            status.style.color = '#a6ffcb';
-            document.getElementById('valor').value = '';
-          })
-          .withFailureHandler(function (err) {
-            status.textContent = 'Erro: ' + err.message;
-            status.style.color = '#ffb3b3';
-          })
-          .registrarLancamento(tipoSelecionado, data, valor);
-      }
+        const params = new URLSearchParams({
+          action: 'registrar',
+          tipo: tipoSelecionado,
+          data: data,
+          valor: valor,
+        });
 
-      /* PREVIEW WHATSAPP */
+        try {
+          const res = await fetch(SCRIPT_URL + '?' + params.toString());
+          const json = await res.json();
+
+          if (json.dashboard) {
+            atualizarDashboard(json.dashboard);
+            ultimoSaldoPos = json.dashboard.saldo;
+          }
+
+          ultimaUrlWhatsapp = json.url;
+          ultimaMensagem = json.mensagem;
+          mostrarPreview();
+
+          status.textContent = 'Lançamento salvo. Confira a mensagem antes de enviar.';
+          status.style.color = '#a6ffcb';
+          document.getElementById('valor').value = '';
+        } catch (err) {
+          console.error('Erro ao registrar', err);
+          status.textContent = 'Erro ao salvar lançamento.';
+          status.style.color = '#ffb3b3';
+        }
+      }
 
       function mostrarPreview() {
         if (!ultimaMensagem) return;
@@ -579,8 +597,6 @@
         }
         fecharPreview();
       }
-
-      /* VERSÃO PC / CELULAR */
 
       function aplicarModoVersao() {
         const body = document.body;
@@ -609,12 +625,9 @@
         document.getElementById('versaoOverlay').classList.add('hidden');
       }
 
-      /* DATA DE HOJE NO CAMPO DATE */
-
       function setDataHoje() {
         const input = document.getElementById('data');
         if (!input) return;
-
         const hoje = new Date();
         const ano = hoje.getFullYear();
         const mes = String(hoje.getMonth() + 1).padStart(2, '0');
@@ -622,13 +635,10 @@
         input.value = `${ano}-${mes}-${dia}`;
       }
 
-      /* INIT */
-
       function init() {
-        setDataHoje();        // data padrão = hoje
-        aplicarModoVersao();  // começa como PC até escolher
-        carregarDashboard();  // saldo + histórico
-        // popup de versão já está visível (versaoOverlay sem hidden)
+        setDataHoje();
+        aplicarModoVersao();
+        carregarDashboard();
       }
 
       init();
